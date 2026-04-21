@@ -22,6 +22,11 @@ import {
   Activity,
   Footprints,
   Dumbbell,
+  Flame,
+  Scale,
+  CalendarDays,
+  Sparkles,
+  CircleDollarSign,
 } from "lucide-react";
 import {
   LineChart,
@@ -63,6 +68,7 @@ type DrillLogEntry = {
   done?: boolean;
   best?: string;
   notes?: string;
+  skipped?: boolean;
 };
 
 type DayLog = Record<string, DrillLogEntry>;
@@ -335,7 +341,7 @@ function Button({
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   className?: string;
-  variant?: "default" | "outline" | "secondary";
+  variant?: "default" | "outline" | "secondary" | "success";
   size?: "default" | "sm";
   asChild?: boolean;
 }) {
@@ -344,6 +350,7 @@ function Button({
     default: "bg-slate-900 text-white hover:bg-slate-800",
     outline: "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
     secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200",
+    success: "bg-emerald-600 text-white hover:bg-emerald-500",
   };
   const sizes = {
     default: "h-10 px-4 text-sm",
@@ -372,11 +379,13 @@ function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} className={cn("w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-500", props.className)} />;
 }
 
-function Badge({ children, className = "", variant = "default" }: { children: React.ReactNode; className?: string; variant?: "default" | "outline" | "secondary" }) {
+function Badge({ children, className = "", variant = "default" }: { children: React.ReactNode; className?: string; variant?: "default" | "outline" | "secondary" | "success" | "warning" }) {
   const variants = {
     default: "bg-slate-900 text-white border border-slate-900",
     outline: "bg-white text-slate-700 border border-slate-300",
     secondary: "bg-slate-100 text-slate-900 border border-slate-200",
+    success: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    warning: "bg-amber-50 text-amber-700 border border-amber-200",
   };
   return <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium", variants[variant], className)}>{children}</span>;
 }
@@ -413,7 +422,21 @@ export default function FatBoySlimApp() {
   useEffect(() => saveState("fatboyslim_athleteName", athlete), [athlete]);
   useEffect(() => saveState("fatboyslim_selectedTrainingDay", selectedDay), [selectedDay]);
 
-  const isPhase2 = weekNumber >= 5;
+  const phase2ByWeek = weekNumber >= 5;
+
+  const completedDrillsThisWeek = useMemo(() => {
+    return Object.keys(logData)
+      .filter((k) => k.startsWith(`week${weekNumber}-`))
+      .flatMap((k) => Object.values(logData[k]))
+      .filter((entry) => entry.done).length;
+  }, [logData, weekNumber]);
+
+  const totalDrillsThisWeek = useMemo(() => {
+    return days.reduce((sum, d) => sum + phase1Plan[d].drills.length, 0);
+  }, []);
+
+  const completionRate = totalDrillsThisWeek > 0 ? completedDrillsThisWeek / totalDrillsThisWeek : 0;
+  const isPhase2 = phase2ByWeek || completionRate >= 0.8;
   const activePlan = isPhase2 ? phase2Plan : phase1Plan;
   const activePhaseLabel = isPhase2 ? "Phase 2: Build Capacity + Progress" : "Phase 1: Beginner Reconditioning";
 
@@ -423,6 +446,26 @@ export default function FatBoySlimApp() {
   const logKey = `week${weekNumber}-${selectedDay}`;
   const todayLog: DayLog = logData[logKey] || {};
   const currentDrillEntry: DrillLogEntry = currentDrill ? todayLog[currentDrill.name] || {} : {};
+
+  const daysCompleted = useMemo(() => {
+    return days.filter((d) => {
+      const key = `week${weekNumber}-${d}`;
+      return logData[key] && Object.values(logData[key]).some((e) => e.done);
+    }).length;
+  }, [logData, weekNumber]);
+
+  const streakWeeks = useMemo(() => {
+    let streak = 0;
+    for (let wk = weekNumber; wk >= 1; wk--) {
+      const completed = days.filter((d) => {
+        const key = `week${wk}-${d}`;
+        return logData[key] && Object.values(logData[key]).some((e) => e.done);
+      }).length;
+      if (completed > 0) streak += 1;
+      else break;
+    }
+    return streak;
+  }, [logData, weekNumber]);
 
   useEffect(() => {
     setCurrentExerciseIndex(0);
@@ -441,6 +484,18 @@ export default function FatBoySlimApp() {
       intervalRef.current = null;
     }
   }, [timerPresetIndex, currentPreset.rounds, currentPreset.work]);
+
+  useEffect(() => {
+    if (currentDrill) {
+      const idx = suggestedTimerIndex(currentDrill.name);
+      if (idx !== null) {
+        setTimerPresetIndex(idx);
+        setLoadedTimerDrill(currentDrill.name);
+      } else {
+        setLoadedTimerDrill("");
+      }
+    }
+  }, [currentExerciseIndex, selectedDay]);
 
   useEffect(() => {
     if (!timerRunning) {
@@ -559,6 +614,10 @@ export default function FatBoySlimApp() {
     .filter((m) => m.percent !== null && !Number.isNaN(m.percent ?? NaN))
     .sort((a, b) => Math.abs((b.percent ?? 0)) - Math.abs((a.percent ?? 0)))[0];
 
+  const startWeight = metricData?.[1]?.weight;
+  const currentWeight = metricData?.[weekNumber]?.weight;
+  const weightChange = startWeight && currentWeight ? (Number(currentWeight) - Number(startWeight)).toFixed(1) : null;
+
   const loadDrillTimer = (drillName: string) => {
     const idx = suggestedTimerIndex(drillName);
     if (idx === null) return;
@@ -635,8 +694,23 @@ export default function FatBoySlimApp() {
     setTimerRunning(false);
   };
 
+  const markSkipped = () => {
+    if (!currentDrill) return;
+    updateDrill(currentDrill.name, "skipped", true);
+    updateDrill(currentDrill.name, "done", false);
+    if (currentExerciseIndex === dayPlan.drills.length - 1) {
+      advanceToNextTrainingDay();
+      return;
+    }
+    setCurrentExerciseIndex((idx) => Math.min(dayPlan.drills.length - 1, idx + 1));
+  };
+
   const goNextExercise = () => {
-    if (currentDrill) updateDrill(currentDrill.name, "done", true);
+    if (currentDrill && !currentDrillEntry.done) {
+      const shouldMark = window.confirm("Mark this exercise as done before moving on?");
+      if (!shouldMark) return;
+      updateDrill(currentDrill.name, "done", true);
+    }
     if (currentExerciseIndex === dayPlan.drills.length - 1) {
       advanceToNextTrainingDay();
       return;
@@ -645,46 +719,67 @@ export default function FatBoySlimApp() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-white text-slate-900">
       <div className="mx-auto max-w-md pb-24">
-        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
           <div className="p-4">
-            <div className="rounded-3xl bg-slate-900 p-4 text-white shadow-lg">
+            <div className="rounded-[28px] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-4 text-white shadow-2xl">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-300">Fat Boy Slim</p>
-                  <h1 className="text-2xl font-bold">{athlete}</h1>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-200">
+                    <Sparkles className="h-3.5 w-3.5" /> Fat Boy Slim
+                  </div>
+                  <h1 className="mt-3 text-2xl font-bold tracking-tight">{athlete}</h1>
                   <p className="mt-1 text-xs text-slate-300">{activePhaseLabel}</p>
                   <p className="mt-1 text-xs text-slate-400">Current training day: {selectedDay.replace("Day", "Day ")}</p>
+                  <p className="mt-1 text-xs text-slate-400">Days completed: {daysCompleted}/7 · Streak: {streakWeeks} week{streakWeeks === 1 ? "" : "s"}</p>
                 </div>
-                <Badge className="rounded-full px-3 py-1 text-sm">Week {weekNumber}</Badge>
+                <div className="space-y-2">
+                  <Badge className="rounded-full px-3 py-1 text-sm">Week {weekNumber}</Badge>
+                  {isPhase2 ? <Badge variant="success" className="rounded-full">Phase 2 Active</Badge> : <Badge variant="warning" className="rounded-full">Phase 1 Build</Badge>}
+                </div>
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-2xl bg-white/10 p-3">
+              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
                   <div className="flex items-center gap-2 text-slate-300"><Target className="h-4 w-4" /> Completion</div>
                   <div className="mt-1 text-xl font-bold">{completionPct}%</div>
                 </div>
-                <div className="rounded-2xl bg-white/10 p-3">
-                  <div className="flex items-center gap-2 text-slate-300"><TrendingUp className="h-4 w-4" /> Top Trend</div>
-                  <div className="mt-1 text-sm font-semibold">{topImprovement ? topImprovement.label : "Waiting for data"}</div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
+                  <div className="flex items-center gap-2 text-slate-300"><TrendingUp className="h-4 w-4" /> Weekly Rate</div>
+                  <div className="mt-1 text-xl font-bold">{Math.round(completionRate * 100)}%</div>
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
+                  <div className="flex items-center gap-2 text-slate-300"><Flame className="h-4 w-4" /> Streak</div>
+                  <div className="mt-1 font-semibold">{streakWeeks} wk</div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
+                  <div className="flex items-center gap-2 text-slate-300"><CalendarDays className="h-4 w-4" /> Days</div>
+                  <div className="mt-1 font-semibold">{daysCompleted}/7</div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
+                  <div className="flex items-center gap-2 text-slate-300"><Scale className="h-4 w-4" /> Weight</div>
+                  <div className="mt-1 font-semibold">{weightChange ? `${weightChange} lb` : "--"}</div>
                 </div>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <Button variant="outline" className="rounded-2xl bg-white text-slate-900" onClick={goBackTrainingDay}><SkipBack className="mr-1 h-4 w-4" /> Back Day</Button>
-                <Button variant="outline" className="rounded-2xl bg-white text-slate-900" onClick={advanceToNextTrainingDay}><SkipForward className="mr-1 h-4 w-4" /> Advance Day</Button>
-                <Button variant="outline" className="rounded-2xl bg-white text-slate-900" onClick={restartCurrentDay}><Undo2 className="mr-1 h-4 w-4" /> Restart Day</Button>
-                <Button variant="outline" className="rounded-2xl bg-white text-slate-900" onClick={goToDay1}>Day 1</Button>
+                <Button variant="outline" className="rounded-2xl border-white/20 bg-white text-slate-900" onClick={goBackTrainingDay}><SkipBack className="mr-1 h-4 w-4" /> Back Day</Button>
+                <Button variant="outline" className="rounded-2xl border-white/20 bg-white text-slate-900" onClick={advanceToNextTrainingDay}><SkipForward className="mr-1 h-4 w-4" /> Advance Day</Button>
+                <Button variant="outline" className="rounded-2xl border-white/20 bg-white text-slate-900" onClick={restartCurrentDay}><Undo2 className="mr-1 h-4 w-4" /> Restart Day</Button>
+                <Button variant="outline" className="rounded-2xl border-white/20 bg-white text-slate-900" onClick={goToDay1}>Day 1</Button>
               </div>
 
               <div className="mt-2">
-                <Button variant="outline" className="w-full rounded-2xl bg-white text-slate-900" onClick={restartCurrentWeek}><RotateCcw className="mr-1 h-4 w-4" /> Restart Week</Button>
+                <Button variant="outline" className="w-full rounded-2xl border-white/20 bg-white text-slate-900" onClick={restartCurrentWeek}><RotateCcw className="mr-1 h-4 w-4" /> Restart Week</Button>
               </div>
 
               <div className="mt-3 flex gap-2">
-                <Input value={athlete} onChange={(e) => setAthlete(e.target.value)} placeholder="Name" className="rounded-2xl bg-white text-slate-900" />
-                <Button variant="outline" className="rounded-2xl" onClick={() => setWeekNumber((w) => Math.max(1, w - 1))}>-</Button>
+                <Input value={athlete} onChange={(e) => setAthlete(e.target.value)} placeholder="Name" className="rounded-2xl border-white/20 bg-white text-slate-900" />
+                <Button variant="outline" className="rounded-2xl border-white/20 bg-white text-slate-900" onClick={() => setWeekNumber((w) => Math.max(1, w - 1))}>-</Button>
                 <Button className="rounded-2xl" onClick={() => setWeekNumber((w) => w + 1)}>+</Button>
               </div>
             </div>
@@ -692,7 +787,7 @@ export default function FatBoySlimApp() {
         </div>
 
         <div className="p-4">
-          <div className="grid grid-cols-3 rounded-2xl bg-slate-100 p-1">
+          <div className="grid grid-cols-3 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
             {([
               ["today", "Today"],
               ["metrics", "Metrics"],
@@ -703,7 +798,7 @@ export default function FatBoySlimApp() {
                 type="button"
                 className={cn(
                   "rounded-xl px-3 py-2 text-sm font-medium transition",
-                  activeTab === key ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
+                  activeTab === key ? "bg-slate-900 text-white shadow-sm" : "text-slate-600"
                 )}
                 onClick={() => setActiveTab(key)}
               >
@@ -714,8 +809,8 @@ export default function FatBoySlimApp() {
 
           {activeTab === "today" && (
             <div className="mt-4 space-y-4">
-              <Card>
-                <CardHeader className="pb-3">
+              <Card className="overflow-hidden">
+                <div className="border-b border-slate-100 bg-gradient-to-r from-white to-slate-50 px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <CardTitle className="text-xl">{dayPlan.title}</CardTitle>
@@ -727,15 +822,15 @@ export default function FatBoySlimApp() {
                     <div className="mb-2 flex items-center justify-between text-sm"><span>Completed</span><span>{completionPct}%</span></div>
                     <Progress value={completionPct} />
                   </div>
-                </CardHeader>
+                </div>
 
-                <CardContent>
-                  <div className="mb-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="mb-3 flex items-center gap-2"><Timer className="h-5 w-5" /><div className="font-semibold">Loaded Timer</div></div>
+                <CardContent className="pt-4">
+                  <div className="mb-4 rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
+                    <div className="mb-3 flex items-center gap-2"><Timer className="h-5 w-5" /><div className="font-semibold">Smart Timer</div></div>
                     <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="rounded-2xl bg-white p-3"><div className="text-xs text-slate-500">Preset</div><div className="mt-1 text-sm font-semibold">{currentPreset.label}</div></div>
-                      <div className="rounded-2xl bg-white p-3"><div className="text-xs text-slate-500">Time</div><div className="mt-1 text-xl font-bold">{formatSeconds(timerSecondsLeft)}</div></div>
-                      <div className="rounded-2xl bg-white p-3"><div className="text-xs text-slate-500">For</div><div className="mt-1 text-sm font-semibold">{loadedTimerDrill || "Select a drill"}</div></div>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-3"><div className="text-xs text-slate-500">Preset</div><div className="mt-1 text-sm font-semibold">{currentPreset.label}</div></div>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-3"><div className="text-xs text-slate-500">Time</div><div className="mt-1 text-xl font-bold">{formatSeconds(timerSecondsLeft)}</div></div>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-3"><div className="text-xs text-slate-500">For</div><div className="mt-1 text-sm font-semibold">{loadedTimerDrill || "Select a drill"}</div></div>
                     </div>
                     <div className="mt-3 flex gap-2">
                       <Button className="rounded-2xl" onClick={() => setTimerRunning((prev) => !prev)}>{timerRunning ? <Pause className="mr-1 h-4 w-4" /> : <Play className="mr-1 h-4 w-4" />}{timerRunning ? "Pause" : "Start"}</Button>
@@ -745,10 +840,14 @@ export default function FatBoySlimApp() {
                   </div>
 
                   <div className="mb-4 rounded-3xl border border-slate-200 bg-white p-4">
-                    <div className="mb-2 text-sm font-semibold text-slate-900">Today’s Exercise List</div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="text-sm font-semibold text-slate-900">Today’s Exercise List</div>
+                      <Badge variant="secondary">{completionPct}% done</Badge>
+                    </div>
                     <div className="space-y-2">
                       {dayPlan.drills.map((drill, idx) => {
                         const done = !!todayLog[drill.name]?.done;
+                        const skipped = !!todayLog[drill.name]?.skipped;
                         return (
                           <div key={drill.name} className={cn("flex items-center justify-between rounded-2xl border px-3 py-2", idx === currentExerciseIndex ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white")}>
                             <div>
@@ -756,7 +855,7 @@ export default function FatBoySlimApp() {
                               <div className="text-xs text-slate-500">{drill.target}</div>
                             </div>
                             <div className="flex items-center gap-2">
-                              {done ? <Badge className="rounded-full">Done</Badge> : <Badge variant="outline" className="rounded-full">Pending</Badge>}
+                              {done ? <Badge variant="success" className="rounded-full">Done</Badge> : skipped ? <Badge variant="warning" className="rounded-full">Skipped</Badge> : <Badge variant="outline" className="rounded-full">Pending</Badge>}
                               <Button variant="outline" size="sm" className="rounded-2xl" onClick={() => setCurrentExerciseIndex(idx)}>Open</Button>
                             </div>
                           </div>
@@ -766,14 +865,14 @@ export default function FatBoySlimApp() {
                   </div>
 
                   {currentDrill && (
-                    <Card className="border-slate-200">
+                    <Card className="border-slate-200 shadow-md">
                       <CardContent className="p-4">
                         <div className="mb-3 flex items-start justify-between gap-3">
                           <div>
                             <div className="flex items-center gap-2"><span className="text-sm font-semibold text-slate-500">#{currentExerciseIndex + 1}</span><h3 className="font-semibold">{currentDrill.name}</h3></div>
                             <p className="mt-1 text-sm text-slate-500">Target: {currentDrill.target}</p>
                           </div>
-                          <Button variant={currentDrillEntry.done ? "default" : "outline"} size="sm" className="rounded-full" onClick={() => updateDrill(currentDrill.name, "done", !currentDrillEntry.done)}><CheckCircle2 className="mr-1 h-4 w-4" /> {currentDrillEntry.done ? "Done" : "Mark"}</Button>
+                          <Button variant={currentDrillEntry.done ? "success" : "outline"} size="sm" className="rounded-full" onClick={() => updateDrill(currentDrill.name, "done", !currentDrillEntry.done)}><CheckCircle2 className="mr-1 h-4 w-4" /> {currentDrillEntry.done ? "Done" : "Mark"}</Button>
                         </div>
 
                         <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-700">
@@ -799,9 +898,10 @@ export default function FatBoySlimApp() {
                         </div>
                         <Textarea placeholder="Notes" value={currentDrillEntry.notes || ""} onChange={(e) => updateDrill(currentDrill.name, "notes", e.target.value)} className="mt-2 min-h-[70px] rounded-2xl" />
 
-                        <div className="mt-4 flex items-center justify-between gap-2">
+                        <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
                           <Button variant="outline" className="rounded-2xl" onClick={() => setCurrentExerciseIndex((idx) => Math.max(0, idx - 1))} disabled={currentExerciseIndex === 0}>Previous</Button>
-                          <div className="text-xs text-slate-500">Exercise {currentExerciseIndex + 1} of {dayPlan.drills.length}</div>
+                          <Button variant="secondary" className="rounded-2xl" onClick={markSkipped}>Skip</Button>
+                          <div className="col-span-2 text-center text-xs text-slate-500 sm:order-none">Exercise {currentExerciseIndex + 1} of {dayPlan.drills.length}</div>
                           <Button className="rounded-2xl" onClick={goNextExercise}>{currentExerciseIndex === dayPlan.drills.length - 1 ? "Finish Day" : "Next"}</Button>
                         </div>
                       </CardContent>
@@ -814,12 +914,26 @@ export default function FatBoySlimApp() {
 
           {activeTab === "metrics" && (
             <div className="mt-4 space-y-4">
-              <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><Trophy className="h-5 w-5" /> Progress Dashboard</CardTitle></CardHeader>
-                <CardContent>
+              <Card className="overflow-hidden">
+                <div className="bg-gradient-to-r from-emerald-50 via-white to-blue-50 p-4">
+                  <CardTitle className="flex items-center gap-2"><Trophy className="h-5 w-5" /> Progress Dashboard</CardTitle>
+                  {topImprovement && (
+                    <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                      <strong>Biggest Win:</strong> {topImprovement.label} improved by {Math.abs(topImprovement.percent ?? 0).toFixed(1)}%
+                    </div>
+                  )}
+                  {weightChange && (
+                    <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                      <strong>Total weight change:</strong> {weightChange} lb since Week 1
+                    </div>
+                  )}
+                </div>
+                <CardContent className="pt-4">
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-slate-500">Top Trend</div><div className="mt-1 font-semibold">{topImprovement ? topImprovement.label : "Waiting for data"}</div></div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-slate-500">PR Status</div><div className="mt-1 font-semibold">{isCurrentWeekPR ? "New best this week" : "No new best yet"}</div></div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-slate-500">Days Done</div><div className="mt-1 font-semibold">{daysCompleted}/7</div></div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-slate-500">Consistency</div><div className="mt-1 font-semibold">{Math.round(completionRate * 100)}%</div></div>
                   </div>
                 </CardContent>
               </Card>
@@ -855,7 +969,7 @@ export default function FatBoySlimApp() {
                     <div>Tracking: <span className="font-medium text-slate-900">{selectedMetric.label}</span>{selectedMetric.better === "lower" ? " · lower is better" : " · higher is better"}</div>
                     {chartPR !== null && <Badge variant="outline" className="rounded-full">Best {chartPR}</Badge>}
                   </div>
-                  <div className="h-64 w-full">
+                  <div className="h-64 w-full rounded-2xl bg-slate-50 p-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" />
