@@ -83,6 +83,8 @@ type TimerPreset = {
   rounds: number;
 };
 
+type HeaderMode = "expanded" | "collapsed";
+
 const days: DayKey[] = ["Day1", "Day2", "Day3", "Day4", "Day5", "Day6", "Day7"];
 
 const makeDrill = (
@@ -414,6 +416,7 @@ export default function FatBoySlimApp() {
   const [timerSecondsLeft, setTimerSecondsLeft] = useState<number>(timerPresets[0].work);
   const [timerRunning, setTimerRunning] = useState<boolean>(false);
   const [loadedTimerDrill, setLoadedTimerDrill] = useState<string>("");
+  const [headerMode, setHeaderMode] = useState<HeaderMode>("expanded");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => saveState("fatboyslim_weekNumber", weekNumber), [weekNumber]);
@@ -421,6 +424,19 @@ export default function FatBoySlimApp() {
   useEffect(() => saveState("fatboyslim_metricData", metricData), [metricData]);
   useEffect(() => saveState("fatboyslim_athleteName", athlete), [athlete]);
   useEffect(() => saveState("fatboyslim_selectedTrainingDay", selectedDay), [selectedDay]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      if (window.scrollY > 120) {
+        setHeaderMode((prev) => (prev === "expanded" ? "collapsed" : prev));
+      } else {
+        setHeaderMode("expanded");
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const phase2ByWeek = weekNumber >= 5;
 
@@ -718,28 +734,50 @@ export default function FatBoySlimApp() {
     setCurrentExerciseIndex((idx) => Math.min(dayPlan.drills.length - 1, idx + 1));
   };
 
+  const headerCollapsed = headerMode === "collapsed";
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-white text-slate-900">
       <div className="mx-auto max-w-md pb-24">
         <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
-          <div className="p-4">
-            <div className="rounded-[28px] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-4 text-white shadow-2xl">
+          <div className="p-2 sm:p-4">
+            <div
+              className={cn(
+                "rounded-[24px] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white shadow-2xl transition-all duration-300",
+                headerCollapsed ? "p-3" : "p-4"
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => setHeaderMode((prev) => (prev === "collapsed" ? "expanded" : "collapsed"))}
+                className="block w-full text-left"
+              >
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-200">
+                  <div className={cn("inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 uppercase tracking-[0.2em] text-slate-200", headerCollapsed ? "px-2 py-1 text-[10px]" : "px-3 py-1 text-[11px]") }>
                     <Sparkles className="h-3.5 w-3.5" /> Fat Boy Slim
                   </div>
-                  <h1 className="mt-3 text-2xl font-bold tracking-tight">{athlete}</h1>
-                  <p className="mt-1 text-xs text-slate-300">{activePhaseLabel}</p>
-                  <p className="mt-1 text-xs text-slate-400">Current training day: {selectedDay.replace("Day", "Day ")}</p>
-                  <p className="mt-1 text-xs text-slate-400">Days completed: {daysCompleted}/7 · Streak: {streakWeeks} week{streakWeeks === 1 ? "" : "s"}</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <h1 className={cn("font-bold tracking-tight", headerCollapsed ? "text-lg" : "text-2xl")}>{athlete}</h1>
+                    <Badge variant="outline" className="rounded-full border-white/20 bg-white/10 text-white">
+                      {selectedDay.replace("Day", "Day ")}
+                    </Badge>
+                  </div>
+                  {!headerCollapsed && <p className="mt-1 text-xs text-slate-300">{activePhaseLabel}</p>}
+                  {!headerCollapsed && <p className="mt-1 text-xs text-slate-400">Days completed: {daysCompleted}/7 · Streak: {streakWeeks} week{streakWeeks === 1 ? "" : "s"}</p>}
                 </div>
-                <div className="space-y-2">
-                  <Badge className="rounded-full px-3 py-1 text-sm">Week {weekNumber}</Badge>
-                  {isPhase2 ? <Badge variant="success" className="rounded-full">Phase 2 Active</Badge> : <Badge variant="warning" className="rounded-full">Phase 1 Build</Badge>}
+                <div className="flex flex-col items-end gap-2">
+                  <Badge className={cn("rounded-full", headerCollapsed ? "px-2 py-1 text-xs" : "px-3 py-1 text-sm")}>Week {weekNumber}</Badge>
+                  {!headerCollapsed && (isPhase2 ? <Badge variant="success" className="rounded-full">Phase 2 Active</Badge> : <Badge variant="warning" className="rounded-full">Phase 1 Build</Badge>)}
+                  <div className="text-white/70">
+                    {headerCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                  </div>
                 </div>
               </div>
+              </button>
 
+              {!headerCollapsed && (
+              <>
               <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
                 <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
                   <div className="flex items-center gap-2 text-slate-300"><Target className="h-4 w-4" /> Completion</div>
@@ -776,8 +814,10 @@ export default function FatBoySlimApp() {
               <div className="mt-2">
                 <Button variant="outline" className="w-full rounded-2xl border-white/20 bg-white text-slate-900" onClick={restartCurrentWeek}><RotateCcw className="mr-1 h-4 w-4" /> Restart Week</Button>
               </div>
+              </>
+            )}
 
-              <div className="mt-3 flex gap-2">
+              <div className={cn("mt-3 flex gap-2", headerCollapsed && "mt-2")}>
                 <Input value={athlete} onChange={(e) => setAthlete(e.target.value)} placeholder="Name" className="rounded-2xl border-white/20 bg-white text-slate-900" />
                 <Button variant="outline" className="rounded-2xl border-white/20 bg-white text-slate-900" onClick={() => setWeekNumber((w) => Math.max(1, w - 1))}>-</Button>
                 <Button className="rounded-2xl" onClick={() => setWeekNumber((w) => w + 1)}>+</Button>
