@@ -1,13 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import {
   CheckCircle2,
   Timer,
@@ -42,6 +35,7 @@ import {
 } from "recharts";
 
 type DayKey = "Day1" | "Day2" | "Day3" | "Day4" | "Day5" | "Day6" | "Day7";
+type TabKey = "today" | "metrics" | "plan";
 
 type Drill = {
   name: string;
@@ -306,34 +300,103 @@ function suggestedTimerIndex(drillName: string): number | null {
   ) {
     return 1;
   }
-  if (
-    name.includes("mobility") ||
-    name.includes("stretch") ||
-    name.includes("breathing") ||
-    name.includes("flow")
-  ) {
+  if (name.includes("mobility") || name.includes("stretch") || name.includes("breathing") || name.includes("flow")) {
     return 2;
   }
   return null;
 }
 
+function cn(...classes: Array<string | false | null | undefined>): string {
+  return classes.filter(Boolean).join(" ");
+}
+
+function Card({ className = "", children }: { className?: string; children: React.ReactNode }) {
+  return <div className={cn("rounded-3xl border border-slate-200 bg-white shadow-sm", className)}>{children}</div>;
+}
+
+function CardHeader({ className = "", children }: { className?: string; children: React.ReactNode }) {
+  return <div className={cn("p-4", className)}>{children}</div>;
+}
+
+function CardContent({ className = "", children }: { className?: string; children: React.ReactNode }) {
+  return <div className={cn("p-4 pt-0", className)}>{children}</div>;
+}
+
+function CardTitle({ className = "", children }: { className?: string; children: React.ReactNode }) {
+  return <h2 className={cn("text-lg font-semibold", className)}>{children}</h2>;
+}
+
+function Button({
+  className = "",
+  variant = "default",
+  size = "default",
+  asChild = false,
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  className?: string;
+  variant?: "default" | "outline" | "secondary";
+  size?: "default" | "sm";
+  asChild?: boolean;
+}) {
+  const base = "inline-flex items-center justify-center rounded-xl font-medium transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50";
+  const variants = {
+    default: "bg-slate-900 text-white hover:bg-slate-800",
+    outline: "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
+    secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200",
+  };
+  const sizes = {
+    default: "h-10 px-4 text-sm",
+    sm: "h-8 px-3 text-xs",
+  };
+
+  if (asChild && React.isValidElement(children)) {
+    const child = children as React.ReactElement<{ className?: string }>;
+    return React.cloneElement(child, {
+      className: cn(base, variants[variant], sizes[size], className, child.props.className),
+    });
+  }
+
+  return (
+    <button className={cn(base, variants[variant], sizes[size], className)} {...props}>
+      {children}
+    </button>
+  );
+}
+
+function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...props} className={cn("h-10 w-full rounded-2xl border border-slate-300 bg-white px-3 text-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-500", props.className)} />;
+}
+
+function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={cn("w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-500", props.className)} />;
+}
+
+function Badge({ children, className = "", variant = "default" }: { children: React.ReactNode; className?: string; variant?: "default" | "outline" | "secondary" }) {
+  const variants = {
+    default: "bg-slate-900 text-white border border-slate-900",
+    outline: "bg-white text-slate-700 border border-slate-300",
+    secondary: "bg-slate-100 text-slate-900 border border-slate-200",
+  };
+  return <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium", variants[variant], className)}>{children}</span>;
+}
+
+function Progress({ value }: { value: number }) {
+  return (
+    <div className="h-2 w-full rounded-full bg-slate-200">
+      <div className="h-2 rounded-full bg-slate-900 transition-all" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
+    </div>
+  );
+}
+
 export default function FatBoySlimApp() {
-  const [selectedDay, setSelectedDay] = useState<DayKey>(() =>
-    loadState<DayKey>("fatboyslim_selectedTrainingDay", firstDayKey())
-  );
+  const [activeTab, setActiveTab] = useState<TabKey>("today");
+  const [selectedDay, setSelectedDay] = useState<DayKey>(() => loadState<DayKey>("fatboyslim_selectedTrainingDay", firstDayKey()));
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState<number>(0);
-  const [weekNumber, setWeekNumber] = useState<number>(() =>
-    loadState<number>("fatboyslim_weekNumber", 1)
-  );
-  const [logData, setLogData] = useState<LogData>(() =>
-    loadState<LogData>("fatboyslim_trainingLog", {})
-  );
-  const [metricData, setMetricData] = useState<MetricData>(() =>
-    loadState<MetricData>("fatboyslim_metricData", {})
-  );
-  const [athlete, setAthlete] = useState<string>(() =>
-    loadState<string>("fatboyslim_athleteName", "Fat Boy Slim")
-  );
+  const [weekNumber, setWeekNumber] = useState<number>(() => loadState<number>("fatboyslim_weekNumber", 1));
+  const [logData, setLogData] = useState<LogData>(() => loadState<LogData>("fatboyslim_trainingLog", {}));
+  const [metricData, setMetricData] = useState<MetricData>(() => loadState<MetricData>("fatboyslim_metricData", {}));
+  const [athlete, setAthlete] = useState<string>(() => loadState<string>("fatboyslim_athleteName", "Fat Boy Slim"));
   const [expandedDrills, setExpandedDrills] = useState<Record<string, boolean>>({});
   const [chartMetricKey, setChartMetricKey] = useState<string>("weight");
   const [timerPresetIndex, setTimerPresetIndex] = useState<number>(0);
@@ -342,7 +405,7 @@ export default function FatBoySlimApp() {
   const [timerSecondsLeft, setTimerSecondsLeft] = useState<number>(timerPresets[0].work);
   const [timerRunning, setTimerRunning] = useState<boolean>(false);
   const [loadedTimerDrill, setLoadedTimerDrill] = useState<string>("");
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => saveState("fatboyslim_weekNumber", weekNumber), [weekNumber]);
   useEffect(() => saveState("fatboyslim_trainingLog", logData), [logData]);
@@ -352,9 +415,7 @@ export default function FatBoySlimApp() {
 
   const isPhase2 = weekNumber >= 5;
   const activePlan = isPhase2 ? phase2Plan : phase1Plan;
-  const activePhaseLabel = isPhase2
-    ? "Phase 2: Build Capacity + Progress"
-    : "Phase 1: Beginner Reconditioning";
+  const activePhaseLabel = isPhase2 ? "Phase 2: Build Capacity + Progress" : "Phase 1: Beginner Reconditioning";
 
   const currentPreset = timerPresets[timerPresetIndex];
   const dayPlan = activePlan[selectedDay];
@@ -393,10 +454,8 @@ export default function FatBoySlimApp() {
     intervalRef.current = setInterval(() => {
       setTimerSecondsLeft((prev) => {
         if (prev > 1) return prev - 1;
-
         if (timerPhase === "work") return currentPreset.rest;
         if (timerRoundsLeft > 1) return currentPreset.work;
-
         setTimerRunning(false);
         return 0;
       });
@@ -468,11 +527,7 @@ export default function FatBoySlimApp() {
       const values = Object.keys(metricData)
         .map((wk) => Number(metricData[Number(wk)]?.[metric.key]))
         .filter((v) => !Number.isNaN(v));
-      result[metric.key] = !values.length
-        ? null
-        : metric.better === "lower"
-          ? Math.min(...values)
-          : Math.max(...values);
+      result[metric.key] = !values.length ? null : metric.better === "lower" ? Math.min(...values) : Math.max(...values);
     });
     return result;
   }, [metricData]);
@@ -484,10 +539,7 @@ export default function FatBoySlimApp() {
 
   const selectedMetric = metrics.find((m) => m.key === chartMetricKey) || metrics[0];
   const currentWeekMetricRaw = metricData?.[weekNumber]?.[chartMetricKey];
-  const currentWeekMetric =
-    currentWeekMetricRaw !== undefined && currentWeekMetricRaw !== ""
-      ? Number(currentWeekMetricRaw)
-      : null;
+  const currentWeekMetric = currentWeekMetricRaw !== undefined && currentWeekMetricRaw !== "" ? Number(currentWeekMetricRaw) : null;
   const chartPR = personalRecords[chartMetricKey];
   const isCurrentWeekPR = currentWeekMetric !== null && chartPR !== null && currentWeekMetric === chartPR;
 
@@ -530,9 +582,7 @@ export default function FatBoySlimApp() {
   const advanceToNextTrainingDay = () => {
     const currentIndex = days.indexOf(selectedDay);
     const nextIndex = currentIndex === days.length - 1 ? 0 : currentIndex + 1;
-    if (currentIndex === days.length - 1) {
-      setWeekNumber((w) => w + 1);
-    }
+    if (currentIndex === days.length - 1) setWeekNumber((w) => w + 1);
     setSelectedDay(days[nextIndex]);
     setCurrentExerciseIndex(0);
   };
@@ -540,9 +590,7 @@ export default function FatBoySlimApp() {
   const goBackTrainingDay = () => {
     const currentIndex = days.indexOf(selectedDay);
     const previousIndex = currentIndex === 0 ? days.length - 1 : currentIndex - 1;
-    if (currentIndex === 0) {
-      setWeekNumber((w) => Math.max(1, w - 1));
-    }
+    if (currentIndex === 0) setWeekNumber((w) => Math.max(1, w - 1));
     setSelectedDay(days[previousIndex]);
     setCurrentExerciseIndex(0);
   };
@@ -563,9 +611,7 @@ export default function FatBoySlimApp() {
     setLogData((prev) => {
       const next: LogData = {};
       for (const [key, value] of Object.entries(prev)) {
-        if (!key.startsWith(`week${weekNumber}-`)) {
-          next[key] = value;
-        }
+        if (!key.startsWith(`week${weekNumber}-`)) next[key] = value;
       }
       return next;
     });
@@ -601,7 +647,7 @@ export default function FatBoySlimApp() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="mx-auto max-w-md pb-24">
-        <div className="sticky top-0 z-10 border-b bg-white/95 backdrop-blur">
+        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="p-4">
             <div className="rounded-3xl bg-slate-900 p-4 text-white shadow-lg">
               <div className="flex items-center justify-between gap-3">
@@ -609,177 +655,109 @@ export default function FatBoySlimApp() {
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-300">Fat Boy Slim</p>
                   <h1 className="text-2xl font-bold">{athlete}</h1>
                   <p className="mt-1 text-xs text-slate-300">{activePhaseLabel}</p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    Current training day: {selectedDay.replace("Day", "Day ")}
-                  </p>
+                  <p className="mt-1 text-xs text-slate-400">Current training day: {selectedDay.replace("Day", "Day ")}</p>
                 </div>
                 <Badge className="rounded-full px-3 py-1 text-sm">Week {weekNumber}</Badge>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                 <div className="rounded-2xl bg-white/10 p-3">
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <Target className="h-4 w-4" /> Completion
-                  </div>
+                  <div className="flex items-center gap-2 text-slate-300"><Target className="h-4 w-4" /> Completion</div>
                   <div className="mt-1 text-xl font-bold">{completionPct}%</div>
                 </div>
                 <div className="rounded-2xl bg-white/10 p-3">
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <TrendingUp className="h-4 w-4" /> Top Trend
-                  </div>
-                  <div className="mt-1 text-sm font-semibold">
-                    {topImprovement ? topImprovement.label : "Waiting for data"}
-                  </div>
+                  <div className="flex items-center gap-2 text-slate-300"><TrendingUp className="h-4 w-4" /> Top Trend</div>
+                  <div className="mt-1 text-sm font-semibold">{topImprovement ? topImprovement.label : "Waiting for data"}</div>
                 </div>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <Button
-                  variant="outline"
-                  className="rounded-2xl bg-white text-slate-900"
-                  onClick={goBackTrainingDay}
-                >
-                  <SkipBack className="mr-1 h-4 w-4" /> Back Day
-                </Button>
-                <Button
-                  variant="outline"
-                  className="rounded-2xl bg-white text-slate-900"
-                  onClick={advanceToNextTrainingDay}
-                >
-                  <SkipForward className="mr-1 h-4 w-4" /> Advance Day
-                </Button>
-                <Button
-                  variant="outline"
-                  className="rounded-2xl bg-white text-slate-900"
-                  onClick={restartCurrentDay}
-                >
-                  <Undo2 className="mr-1 h-4 w-4" /> Restart Day
-                </Button>
-                <Button
-                  variant="outline"
-                  className="rounded-2xl bg-white text-slate-900"
-                  onClick={goToDay1}
-                >
-                  Day 1
-                </Button>
+                <Button variant="outline" className="rounded-2xl bg-white text-slate-900" onClick={goBackTrainingDay}><SkipBack className="mr-1 h-4 w-4" /> Back Day</Button>
+                <Button variant="outline" className="rounded-2xl bg-white text-slate-900" onClick={advanceToNextTrainingDay}><SkipForward className="mr-1 h-4 w-4" /> Advance Day</Button>
+                <Button variant="outline" className="rounded-2xl bg-white text-slate-900" onClick={restartCurrentDay}><Undo2 className="mr-1 h-4 w-4" /> Restart Day</Button>
+                <Button variant="outline" className="rounded-2xl bg-white text-slate-900" onClick={goToDay1}>Day 1</Button>
               </div>
 
               <div className="mt-2">
-                <Button
-                  variant="outline"
-                  className="w-full rounded-2xl bg-white text-slate-900"
-                  onClick={restartCurrentWeek}
-                >
-                  <RotateCcw className="mr-1 h-4 w-4" /> Restart Week
-                </Button>
+                <Button variant="outline" className="w-full rounded-2xl bg-white text-slate-900" onClick={restartCurrentWeek}><RotateCcw className="mr-1 h-4 w-4" /> Restart Week</Button>
               </div>
 
               <div className="mt-3 flex gap-2">
-                <Input
-                  value={athlete}
-                  onChange={(e) => setAthlete(e.target.value)}
-                  placeholder="Name"
-                  className="rounded-2xl bg-white text-slate-900"
-                />
-                <Button
-                  variant="outline"
-                  className="rounded-2xl"
-                  onClick={() => setWeekNumber((w) => Math.max(1, w - 1))}
-                >
-                  -
-                </Button>
-                <Button className="rounded-2xl" onClick={() => setWeekNumber((w) => w + 1)}>
-                  +
-                </Button>
+                <Input value={athlete} onChange={(e) => setAthlete(e.target.value)} placeholder="Name" className="rounded-2xl bg-white text-slate-900" />
+                <Button variant="outline" className="rounded-2xl" onClick={() => setWeekNumber((w) => Math.max(1, w - 1))}>-</Button>
+                <Button className="rounded-2xl" onClick={() => setWeekNumber((w) => w + 1)}>+</Button>
               </div>
             </div>
           </div>
         </div>
 
         <div className="p-4">
-          <Tabs defaultValue="today" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 rounded-2xl">
-              <TabsTrigger value="today">Today</TabsTrigger>
-              <TabsTrigger value="metrics">Metrics</TabsTrigger>
-              <TabsTrigger value="plan">Plan</TabsTrigger>
-            </TabsList>
+          <div className="grid grid-cols-3 rounded-2xl bg-slate-100 p-1">
+            {([
+              ["today", "Today"],
+              ["metrics", "Metrics"],
+              ["plan", "Plan"],
+            ] as Array<[TabKey, string]>).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={cn(
+                  "rounded-xl px-3 py-2 text-sm font-medium transition",
+                  activeTab === key ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
+                )}
+                onClick={() => setActiveTab(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-            <TabsContent value="today" className="mt-4 space-y-4">
-              <Card className="rounded-3xl shadow-sm">
+          {activeTab === "today" && (
+            <div className="mt-4 space-y-4">
+              <Card>
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <CardTitle className="text-xl">{dayPlan.title}</CardTitle>
                       <p className="mt-1 text-sm text-slate-600">{dayPlan.focus}</p>
                     </div>
-                    <div className="rounded-2xl bg-slate-100 p-3">
-                      <HeartPulse className="h-5 w-5" />
-                    </div>
+                    <div className="rounded-2xl bg-slate-100 p-3"><HeartPulse className="h-5 w-5" /></div>
                   </div>
                   <div className="mt-3">
-                    <div className="mb-2 flex items-center justify-between text-sm">
-                      <span>Completed</span>
-                      <span>{completionPct}%</span>
-                    </div>
+                    <div className="mb-2 flex items-center justify-between text-sm"><span>Completed</span><span>{completionPct}%</span></div>
                     <Progress value={completionPct} />
                   </div>
                 </CardHeader>
 
                 <CardContent>
-                  <div className="mb-4 rounded-3xl border bg-slate-50 p-4">
-                    <div className="mb-3 flex items-center gap-2">
-                      <Timer className="h-5 w-5" />
-                      <div className="font-semibold">Loaded Timer</div>
-                    </div>
+                  <div className="mb-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="mb-3 flex items-center gap-2"><Timer className="h-5 w-5" /><div className="font-semibold">Loaded Timer</div></div>
                     <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="rounded-2xl bg-white p-3">
-                        <div className="text-xs text-slate-500">Preset</div>
-                        <div className="mt-1 text-sm font-semibold">{currentPreset.label}</div>
-                      </div>
-                      <div className="rounded-2xl bg-white p-3">
-                        <div className="text-xs text-slate-500">Time</div>
-                        <div className="mt-1 text-xl font-bold">{formatSeconds(timerSecondsLeft)}</div>
-                      </div>
-                      <div className="rounded-2xl bg-white p-3">
-                        <div className="text-xs text-slate-500">For</div>
-                        <div className="mt-1 text-sm font-semibold">{loadedTimerDrill || "Select a drill"}</div>
-                      </div>
+                      <div className="rounded-2xl bg-white p-3"><div className="text-xs text-slate-500">Preset</div><div className="mt-1 text-sm font-semibold">{currentPreset.label}</div></div>
+                      <div className="rounded-2xl bg-white p-3"><div className="text-xs text-slate-500">Time</div><div className="mt-1 text-xl font-bold">{formatSeconds(timerSecondsLeft)}</div></div>
+                      <div className="rounded-2xl bg-white p-3"><div className="text-xs text-slate-500">For</div><div className="mt-1 text-sm font-semibold">{loadedTimerDrill || "Select a drill"}</div></div>
                     </div>
                     <div className="mt-3 flex gap-2">
-                      <Button className="rounded-2xl" onClick={() => setTimerRunning((prev) => !prev)}>
-                        {timerRunning ? <Pause className="mr-1 h-4 w-4" /> : <Play className="mr-1 h-4 w-4" />}
-                        {timerRunning ? "Pause" : "Start"}
-                      </Button>
-                      <Button variant="outline" className="rounded-2xl" onClick={resetTimer}>
-                        <RotateCcw className="mr-1 h-4 w-4" /> Reset
-                      </Button>
+                      <Button className="rounded-2xl" onClick={() => setTimerRunning((prev) => !prev)}>{timerRunning ? <Pause className="mr-1 h-4 w-4" /> : <Play className="mr-1 h-4 w-4" />}{timerRunning ? "Pause" : "Start"}</Button>
+                      <Button variant="outline" className="rounded-2xl" onClick={resetTimer}><RotateCcw className="mr-1 h-4 w-4" /> Reset</Button>
                     </div>
-                    <div className="mt-2 text-sm text-slate-500">
-                      {currentPreset.work}s work / {currentPreset.rest}s rest for {currentPreset.rounds} rounds
-                    </div>
+                    <div className="mt-2 text-sm text-slate-500">{currentPreset.work}s work / {currentPreset.rest}s rest for {currentPreset.rounds} rounds</div>
                   </div>
 
-                  <div className="mb-4 rounded-3xl border bg-white p-4">
+                  <div className="mb-4 rounded-3xl border border-slate-200 bg-white p-4">
                     <div className="mb-2 text-sm font-semibold text-slate-900">Today’s Exercise List</div>
                     <div className="space-y-2">
                       {dayPlan.drills.map((drill, idx) => {
                         const done = !!todayLog[drill.name]?.done;
                         return (
-                          <div
-                            key={drill.name}
-                            className={`flex items-center justify-between rounded-2xl border px-3 py-2 ${
-                              idx === currentExerciseIndex ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"
-                            }`}
-                          >
+                          <div key={drill.name} className={cn("flex items-center justify-between rounded-2xl border px-3 py-2", idx === currentExerciseIndex ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white")}>
                             <div>
                               <div className="text-sm font-medium text-slate-900">{idx + 1}. {drill.name}</div>
                               <div className="text-xs text-slate-500">{drill.target}</div>
                             </div>
                             <div className="flex items-center gap-2">
                               {done ? <Badge className="rounded-full">Done</Badge> : <Badge variant="outline" className="rounded-full">Pending</Badge>}
-                              <Button variant="outline" size="sm" className="rounded-2xl" onClick={() => setCurrentExerciseIndex(idx)}>
-                                Open
-                              </Button>
+                              <Button variant="outline" size="sm" className="rounded-2xl" onClick={() => setCurrentExerciseIndex(idx)}>Open</Button>
                             </div>
                           </div>
                         );
@@ -787,25 +765,15 @@ export default function FatBoySlimApp() {
                     </div>
                   </div>
 
-                  {currentDrill ? (
-                    <Card className="rounded-3xl border-slate-200">
+                  {currentDrill && (
+                    <Card className="border-slate-200">
                       <CardContent className="p-4">
                         <div className="mb-3 flex items-start justify-between gap-3">
                           <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-slate-500">#{currentExerciseIndex + 1}</span>
-                              <h3 className="font-semibold">{currentDrill.name}</h3>
-                            </div>
+                            <div className="flex items-center gap-2"><span className="text-sm font-semibold text-slate-500">#{currentExerciseIndex + 1}</span><h3 className="font-semibold">{currentDrill.name}</h3></div>
                             <p className="mt-1 text-sm text-slate-500">Target: {currentDrill.target}</p>
                           </div>
-                          <Button
-                            variant={currentDrillEntry.done ? "default" : "outline"}
-                            size="sm"
-                            className="rounded-full"
-                            onClick={() => updateDrill(currentDrill.name, "done", !currentDrillEntry.done)}
-                          >
-                            <CheckCircle2 className="mr-1 h-4 w-4" /> {currentDrillEntry.done ? "Done" : "Mark"}
-                          </Button>
+                          <Button variant={currentDrillEntry.done ? "default" : "outline"} size="sm" className="rounded-full" onClick={() => updateDrill(currentDrill.name, "done", !currentDrillEntry.done)}><CheckCircle2 className="mr-1 h-4 w-4" /> {currentDrillEntry.done ? "Done" : "Mark"}</Button>
                         </div>
 
                         <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-700">
@@ -814,130 +782,78 @@ export default function FatBoySlimApp() {
                         </div>
 
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {suggestedTimerIndex(currentDrill.name) !== null ? (
-                            <Button variant="outline" className="rounded-2xl" size="sm" onClick={() => loadDrillTimer(currentDrill.name)}>
-                              <Timer className="mr-1 h-4 w-4" /> Load timer
-                            </Button>
-                          ) : null}
-                          <Button variant="outline" className="rounded-2xl" size="sm" onClick={() => toggleDrill(currentDrill.name)}>
-                            {!!expandedDrills[currentDrill.name] ? <ChevronUp className="mr-1 h-4 w-4" /> : <ChevronDown className="mr-1 h-4 w-4" />}
-                            {!!expandedDrills[currentDrill.name] ? "Less" : "How to do it"}
-                          </Button>
-                          <Button asChild variant="outline" className="rounded-2xl" size="sm">
-                            <a href={videoSearchUrl(currentDrill.videoQuery)} target="_blank" rel="noreferrer">
-                              <ExternalLink className="mr-1 h-4 w-4" /> Watch demo
-                            </a>
-                          </Button>
+                          {suggestedTimerIndex(currentDrill.name) !== null && <Button variant="outline" className="rounded-2xl" size="sm" onClick={() => loadDrillTimer(currentDrill.name)}><Timer className="mr-1 h-4 w-4" /> Load timer</Button>}
+                          <Button variant="outline" className="rounded-2xl" size="sm" onClick={() => toggleDrill(currentDrill.name)}>{expandedDrills[currentDrill.name] ? <ChevronUp className="mr-1 h-4 w-4" /> : <ChevronDown className="mr-1 h-4 w-4" />}{expandedDrills[currentDrill.name] ? "Less" : "How to do it"}</Button>
+                          <Button asChild variant="outline" className="rounded-2xl" size="sm"><a href={videoSearchUrl(currentDrill.videoQuery)} target="_blank" rel="noreferrer"><ExternalLink className="mr-1 h-4 w-4" /> Watch demo</a></Button>
                         </div>
 
-                        {!!expandedDrills[currentDrill.name] && (
-                          <div className="mt-3 rounded-2xl border bg-white p-3 text-sm">
+                        {expandedDrills[currentDrill.name] && (
+                          <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm">
                             <div><span className="font-medium text-slate-900">How:</span> {currentDrill.details}</div>
                             <div className="mt-2"><span className="font-medium text-slate-900">Why:</span> {currentDrill.why}</div>
                           </div>
                         )}
 
                         <div className="mt-3 grid grid-cols-1 gap-2">
-                          <Input
-                            inputMode="decimal"
-                            placeholder="Best result, minutes, weight used, or reps"
-                            value={currentDrillEntry.best || ""}
-                            onChange={(e) => updateDrill(currentDrill.name, "best", e.target.value)}
-                            className="rounded-2xl"
-                          />
+                          <Input inputMode="decimal" placeholder="Best result, minutes, weight used, or reps" value={currentDrillEntry.best || ""} onChange={(e) => updateDrill(currentDrill.name, "best", e.target.value)} className="rounded-2xl" />
                         </div>
-                        <Textarea
-                          placeholder="Notes"
-                          value={currentDrillEntry.notes || ""}
-                          onChange={(e) => updateDrill(currentDrill.name, "notes", e.target.value)}
-                          className="mt-2 min-h-[70px] rounded-2xl"
-                        />
+                        <Textarea placeholder="Notes" value={currentDrillEntry.notes || ""} onChange={(e) => updateDrill(currentDrill.name, "notes", e.target.value)} className="mt-2 min-h-[70px] rounded-2xl" />
 
                         <div className="mt-4 flex items-center justify-between gap-2">
-                          <Button
-                            variant="outline"
-                            className="rounded-2xl"
-                            onClick={() => setCurrentExerciseIndex((idx) => Math.max(0, idx - 1))}
-                            disabled={currentExerciseIndex === 0}
-                          >
-                            Previous
-                          </Button>
+                          <Button variant="outline" className="rounded-2xl" onClick={() => setCurrentExerciseIndex((idx) => Math.max(0, idx - 1))} disabled={currentExerciseIndex === 0}>Previous</Button>
                           <div className="text-xs text-slate-500">Exercise {currentExerciseIndex + 1} of {dayPlan.drills.length}</div>
-                          <Button className="rounded-2xl" onClick={goNextExercise}>
-                            {currentExerciseIndex === dayPlan.drills.length - 1 ? "Finish Day" : "Next"}
-                          </Button>
+                          <Button className="rounded-2xl" onClick={goNextExercise}>{currentExerciseIndex === dayPlan.drills.length - 1 ? "Finish Day" : "Next"}</Button>
                         </div>
                       </CardContent>
                     </Card>
-                  ) : null}
+                  )}
                 </CardContent>
               </Card>
-            </TabsContent>
+            </div>
+          )}
 
-            <TabsContent value="metrics" className="mt-4 space-y-4">
-              <Card className="rounded-3xl shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Trophy className="h-5 w-5" /> Progress Dashboard</CardTitle>
-                </CardHeader>
+          {activeTab === "metrics" && (
+            <div className="mt-4 space-y-4">
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Trophy className="h-5 w-5" /> Progress Dashboard</CardTitle></CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-2xl border bg-slate-50 p-4">
-                      <div className="text-slate-500">Top Trend</div>
-                      <div className="mt-1 font-semibold">{topImprovement ? topImprovement.label : "Waiting for data"}</div>
-                    </div>
-                    <div className="rounded-2xl border bg-slate-50 p-4">
-                      <div className="text-slate-500">PR Status</div>
-                      <div className="mt-1 font-semibold">{isCurrentWeekPR ? "New best this week" : "No new best yet"}</div>
-                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-slate-500">Top Trend</div><div className="mt-1 font-semibold">{topImprovement ? topImprovement.label : "Waiting for data"}</div></div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-slate-500">PR Status</div><div className="mt-1 font-semibold">{isCurrentWeekPR ? "New best this week" : "No new best yet"}</div></div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="rounded-3xl shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5" /> Weekly Metrics</CardTitle>
-                </CardHeader>
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5" /> Weekly Metrics</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                   {metrics.map((metric) => {
                     const pr = personalRecords[metric.key];
                     const currentValue = metricData?.[weekNumber]?.[metric.key];
                     const isPR = currentValue !== undefined && currentValue !== "" && pr !== null && Number(currentValue) === pr;
                     return (
-                      <div key={metric.key} className="rounded-2xl border p-3">
+                      <div key={metric.key} className="rounded-2xl border border-slate-200 p-3">
                         <div className="mb-2 flex items-center justify-between gap-2">
                           <p className="text-sm font-medium text-slate-700">{metric.label}{metric.unit ? ` (${metric.unit})` : ""}</p>
-                          {pr !== null ? (
-                            <Badge variant="outline" className="rounded-full">
-                              <Medal className="mr-1 h-3.5 w-3.5" /> Best {pr}
-                            </Badge>
-                          ) : null}
+                          {pr !== null && <Badge variant="outline" className="rounded-full"><Medal className="mr-1 h-3.5 w-3.5" /> Best {pr}</Badge>}
                         </div>
                         <Input inputMode="decimal" placeholder="Enter this week's value" value={currentValue || ""} onChange={(e) => updateMetric(metric.key, e.target.value)} className="rounded-2xl" />
-                        {isPR ? <div className="mt-2 text-sm font-medium text-green-600">New personal best</div> : null}
+                        {isPR && <div className="mt-2 text-sm font-medium text-green-600">New personal best</div>}
                       </div>
                     );
                   })}
                 </CardContent>
               </Card>
 
-              <Card className="rounded-3xl shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5" /> Trend Graph</CardTitle>
-                </CardHeader>
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5" /> Trend Graph</CardTitle></CardHeader>
                 <CardContent>
                   <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-                    {metrics.map((metric) => (
-                      <Button key={metric.key} size="sm" variant={chartMetricKey === metric.key ? "default" : "outline"} className="rounded-2xl" onClick={() => setChartMetricKey(metric.key)}>
-                        {metric.label}
-                      </Button>
-                    ))}
+                    {metrics.map((metric) => <Button key={metric.key} size="sm" variant={chartMetricKey === metric.key ? "default" : "outline"} className="rounded-2xl" onClick={() => setChartMetricKey(metric.key)}>{metric.label}</Button>)}
                   </div>
                   <div className="mb-3 flex items-center justify-between gap-3 text-sm text-slate-500">
-                    <div>
-                      Tracking: <span className="font-medium text-slate-900">{selectedMetric.label}</span>
-                      {selectedMetric.better === "lower" ? " · lower is better" : " · higher is better"}
-                    </div>
-                    {chartPR !== null ? <Badge variant="outline" className="rounded-full">Best {chartPR}</Badge> : null}
+                    <div>Tracking: <span className="font-medium text-slate-900">{selectedMetric.label}</span>{selectedMetric.better === "lower" ? " · lower is better" : " · higher is better"}</div>
+                    {chartPR !== null && <Badge variant="outline" className="rounded-full">Best {chartPR}</Badge>}
                   </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
@@ -954,10 +870,8 @@ export default function FatBoySlimApp() {
                 </CardContent>
               </Card>
 
-              <Card className="rounded-3xl shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5" /> Weekly Snapshot</CardTitle>
-                </CardHeader>
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5" /> Weekly Snapshot</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                   {metricSummary.map((m) => {
                     let text = "Add this week and last week to compare.";
@@ -968,13 +882,13 @@ export default function FatBoySlimApp() {
                       text = direction === "No change" ? "No change" : `${direction} by ${absTrend}${m.unit ? ` ${m.unit}` : ""}${percentText}`;
                     }
                     return (
-                      <div key={m.key} className="flex items-center justify-between rounded-2xl border p-3">
+                      <div key={m.key} className="flex items-center justify-between rounded-2xl border border-slate-200 p-3">
                         <div>
                           <p className="font-medium">{m.label}</p>
                           <p className="text-sm text-slate-500">{text}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          {personalRecords[m.key] !== null ? <Badge variant="secondary" className="rounded-full">Best {personalRecords[m.key]}</Badge> : null}
+                          {personalRecords[m.key] !== null && <Badge variant="secondary" className="rounded-full">Best {personalRecords[m.key]}</Badge>}
                           <Badge variant="outline" className="rounded-full">{metricData?.[weekNumber]?.[m.key] || "--"}</Badge>
                         </div>
                       </div>
@@ -982,16 +896,16 @@ export default function FatBoySlimApp() {
                   })}
                 </CardContent>
               </Card>
-            </TabsContent>
+            </div>
+          )}
 
-            <TabsContent value="plan" className="mt-4 space-y-4">
-              <Card className="rounded-3xl shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Footprints className="h-5 w-5" /> Weekly Plan</CardTitle>
-                </CardHeader>
+          {activeTab === "plan" && (
+            <div className="mt-4 space-y-4">
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Footprints className="h-5 w-5" /> Weekly Plan</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                   {days.map((day) => (
-                    <Card key={day} className="rounded-3xl border-slate-200">
+                    <Card key={day} className="border-slate-200">
                       <CardContent className="p-4">
                         <div className="mb-2 flex items-center justify-between">
                           <div>
@@ -1015,11 +929,7 @@ export default function FatBoySlimApp() {
                               </div>
                               <p className="mt-1 text-sm text-slate-600">{drill.cue}</p>
                               <div className="mt-2 text-sm text-slate-500">{drill.why}</div>
-                              <div className="mt-2">
-                                <a href={videoSearchUrl(drill.videoQuery)} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm font-medium text-blue-600 hover:underline">
-                                  <ExternalLink className="mr-1 h-4 w-4" /> Demo search
-                                </a>
-                              </div>
+                              <div className="mt-2"><a href={videoSearchUrl(drill.videoQuery)} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm font-medium text-blue-600 hover:underline"><ExternalLink className="mr-1 h-4 w-4" /> Demo search</a></div>
                             </div>
                           ))}
                         </div>
@@ -1028,8 +938,8 @@ export default function FatBoySlimApp() {
                   ))}
                 </CardContent>
               </Card>
-            </TabsContent>
-          </Tabs>
+            </div>
+          )}
         </div>
       </div>
     </div>
